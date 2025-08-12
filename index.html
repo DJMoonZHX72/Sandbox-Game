@@ -1,0 +1,389 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+<meta charset="UTF-8">  
+<title>Sandbox Game</title>  
+<style>  
+  body {  
+    background: #1e293b;  
+    color: white;  
+    font-family: sans-serif;  
+    display: flex;  
+    gap: 10px;  
+    padding: 10px;  
+  }  
+  canvas {  
+    background: #000;  
+    image-rendering: pixelated;  
+    cursor: crosshair;  
+    border: 2px solid #555;  
+  }  
+  .toolbar {  
+    display: flex;  
+    flex-direction: column;  
+    gap: 5px;  
+    background: #334155;  
+    padding: 10px;  
+    border-radius: 8px;  
+  }  
+  button {  
+    padding: 5px;  
+    background: #475569;  
+    border: none;  
+    color: white;  
+    cursor: pointer;  
+    border-radius: 5px;  
+  }  
+  button.active {  
+    outline: 2px solid yellow;  
+  }  
+</style>  
+</head>  
+<body>  
+  
+<div class="toolbar">  
+  <div id="elements"></div>  
+  <label>Brush <input type="range" id="brush" min="1" max="12" value="4"></label>  
+  <button id="pauseBtn">Pause</button>  
+  <button id="clearBtn">Clear</button>  
+  <button id="gravityBtn">Gravity: On</button>  
+</div>  
+  
+<canvas id="c"></canvas>  
+  
+<script>
+const width = 200;  
+const height = 150;  
+const scale = 4;  
+const canvas = document.getElementById("c");  
+canvas.width = width * scale;  
+canvas.height = height * scale;  
+const ctx = canvas.getContext("2d");  
+  
+const elements = {  
+  sand:  { color: "#e3b25a", type: "powder" },  
+  water: { color: "#4aa3ff", type: "liquid" },  
+  wall:  { color: "#666666", type: "static" },  
+  fire:  { color: "#ff6b35", type: "fire" },  
+  plant: { color: "#74c476", type: "plant" },  
+  heater:  { color: "#ff0000", type: "heater" },  
+  cooler:  { color: "#00ffff", type: "cooler" },  
+  erase: { color: null, type: "erase" },
+  ice:   { color: "#aee6ff", type: "solid" },
+  steam: { color: "#cccccc", type: "gas" },
+  moltenGlass: { color: "#ffcc66", type: "liquid" },
+  glass: { color: "#cce6ff", type: "solid" },
+  superHeater: { color: "#ff0000", type: "superHeater" },
+  superCooler: { color: "#00ffff", type: "superCooler" }
+};  
+  
+let grid = new Array(width * height).fill(null);  
+let running = true;  
+let brushSize = 4;  
+let selected = "sand";  
+let gravity = true;  
+  
+// Toolbar  
+const elContainer = document.getElementById("elements");  
+Object.keys(elements).forEach(key => {  
+  const btn = document.createElement("button");  
+  btn.textContent = key;  
+  btn.onclick = () => {  
+    selected = key;  
+    document.querySelectorAll("#elements button").forEach(b=>b.classList.remove("active"));  
+    btn.classList.add("active");  
+  };  
+  if (key === "sand") btn.classList.add("active");  
+  elContainer.appendChild(btn);  
+});  
+  
+document.getElementById("brush").oninput = e => brushSize = Number(e.target.value);  
+document.getElementById("pauseBtn").onclick = () => running = !running;  
+document.getElementById("clearBtn").onclick = () => grid.fill(null);  
+document.getElementById("gravityBtn").onclick = e => {  
+  gravity = !gravity;  
+  e.target.textContent = `Gravity: ${gravity ? "On" : "Off"}`;  
+};  
+  
+const idx = (x,y) => x + y * width;  
+const inside = (x,y) => x>=0 && y>=0 && x<width && y<height;  
+  
+function paintAt(gx, gy, elem) {  
+  for (let dy=-Math.floor(brushSize/2); dy<=Math.floor(brushSize/2); dy++) {  
+    for (let dx=-Math.floor(brushSize/2); dx<=Math.floor(brushSize/2); dx++) {  
+      const x = gx + dx, y = gy + dy;  
+      if (!inside(x,y)) continue;  
+      if (elem === "erase") grid[idx(x,y)] = null;  
+      else grid[idx(x,y)] = { name: elem, age: 0, temp: 20 };  
+    }  
+  }  
+}  
+  
+function step() {
+  for (let y=height-1; y>=0; y--) {  
+    for (let x=0; x<width; x++) {  
+      const i = idx(x,y);  
+      const cell = grid[i];  
+      if (!cell) continue;  
+      const meta = elements[cell.name];  
+      cell.age++;  
+  
+      // Heater  
+      if (meta.type === "heater" && cell.age % 60 === 0) {  
+        for (let ry=-1; ry<=1; ry++) {  
+          for (let rx=-1; rx<=1; rx++) {  
+            if (rx===0 && ry===0) continue;  
+            const nx = x+rx, ny = y+ry;  
+            if (!inside(nx,ny)) continue;  
+            const ncell = grid[idx(nx,ny)];  
+            if (ncell) ncell.temp += 1;  
+          }  
+        }  
+      }  
+  
+      // Cooler  
+      if (meta.type === "cooler" && cell.age % 60 === 0) {  
+        for (let ry=-1; ry<=1; ry++) {  
+          for (let rx=-1; rx<=1; rx++) {  
+            if (rx===0 && ry===0) continue;  
+            const nx = x+rx, ny = y+ry;  
+            if (!inside(nx,ny)) continue;  
+            const ncell = grid[idx(nx,ny)];  
+            if (ncell) ncell.temp -= 1;  
+          }  
+        }  
+      }
+      
+      if (meta.type === "superHeater" && cell.age % 2 === 0) {  
+        for (let ry=-1; ry<=1; ry++) {  
+          for (let rx=-1; rx<=1; rx++) {  
+            if (rx===0 && ry===0) continue;  
+            const nx = x+rx, ny = y+ry;  
+            if (!inside(nx,ny)) continue;  
+            const ncell = grid[idx(nx,ny)];  
+            if (ncell) ncell.temp += 1;  
+          }  
+        }  
+      }  
+      
+      if (meta.type === "superCooler" && cell.age % 2 === 0) {  
+        for (let ry=-1; ry<=1; ry++) {  
+          for (let rx=-1; rx<=1; rx++) {  
+            if (rx===0 && ry===0) continue;  
+            const nx = x+rx, ny = y+ry;  
+            if (!inside(nx,ny)) continue;  
+            const ncell = grid[idx(nx,ny)];  
+            if (ncell) ncell.temp -= 1;  
+          }  
+        }  
+      }
+  
+      if (meta.type === "powder") {  
+        const below = inside(x,y+1) ? grid[idx(x,y+1)] : { name: "wall" };  
+        if (gravity && (!below || elements[below.name].type==="liquid")) {  
+          grid[idx(x,y+1)] = cell;  
+          grid[i] = (!below || elements[below.name].type!=="liquid") ? null : below;  
+          continue;  
+        }  
+        const dir = Math.random()>0.5?1:-1;  
+        if (inside(x+dir,y+1) && !grid[idx(x+dir,y+1)]) {  
+          grid[idx(x+dir,y+1)] = cell;  
+          grid[i] = null;  
+          continue;  
+        }  
+      }  
+      if (meta.type === "liquid") {  
+        if (gravity && inside(x,y+1) && !grid[idx(x,y+1)]) {  
+          grid[idx(x,y+1)] = cell;  
+          grid[i] = null;  
+          continue;  
+        }  
+        const dir = Math.random()>0.5?1:-1;  
+        if (inside(x+dir,y) && !grid[idx(x+dir,y)]) {  
+          grid[idx(x+dir,y)] = cell;  
+          grid[i] = null;  
+          continue;  
+        }  
+        if (inside(x+dir,y+1) && !grid[idx(x+dir,y+1)]) {  
+          grid[idx(x+dir,y+1)] = cell;  
+          grid[i] = null;  
+          continue;  
+        }  
+      }  
+      if (meta.type === "fire") {  
+        if (cell.age > 20) { grid[i] = null; continue; }  
+        for (let ry=-1; ry<=1; ry++) for (let rx=-1; rx<=1; rx++) {  
+          if (rx===0 && ry===0) continue;  
+          const nx=x+rx, ny=y+ry;  
+          if (!inside(nx,ny)) continue;  
+          const ncell = grid[idx(nx,ny)];  
+          if (ncell && elements[ncell.name].type === "plant") {  
+            grid[idx(nx,ny)] = { name:"fire", age:0, temp:cell.temp };  
+          }  
+        }  
+      }  
+      if (meta.type === "plant" && cell.age % 50 === 0) {
+        const dirs=[[1,0],[-1,0],[0,1],[0,-1]];  
+        const [dx,dy] = dirs[Math.floor(Math.random()*dirs.length)];  
+        const nx = x+dx, ny = y+dy;  
+        if (inside(nx,ny) && !grid[idx(nx,ny)]) {  
+          if (Math.random()<0.25) grid[idx(nx,ny)] = { name:"plant", age:0, temp:20 };  
+        }  
+      }
+      if (meta.type === "gas") {
+        if (inside(x, y - 1) && !grid[idx(x, y - 1)] && Math.random() < 0.3) {
+          grid[idx(x, y - 1)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        const dir = Math.random() > 0.5 ? 1 : -1;
+        if (inside(x + dir, y) && !grid[idx(x + dir, y)]) {
+          grid[idx(x + dir, y)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        if (inside(x + dir, y - 1) && !grid[idx(x + dir, y - 1)]) {
+          grid[idx(x + dir, y - 1)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        if (Math.random() < 0.01) { 
+          grid[i] = null; 
+          continue; 
+        }
+      }
+    }  
+  }
+  let nextGrid = [...grid]; // salin grid buat frame berikutnya
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = idx(x, y);
+      const cell = grid[i];
+      if (!cell) continue;
+
+      // ========== DIFUSI SUHU ==========
+      for (let ry = -1; ry <= 1; ry++) {
+        for (let rx = -1; rx <= 1; rx++) {
+          if (rx === 0 && ry === 0) continue;
+          const nx = x + rx, ny = y + ry;
+          if (!inside(nx, ny)) continue;
+          const ncell = grid[idx(nx, ny)];
+          if (ncell) {
+            const diff = (cell.temp - ncell.temp) * 0.05; // 5% transfer
+            cell.temp -= diff;
+            ncell.temp += diff;
+          }
+        }
+      }
+
+      // ========== REAKSI SUHU ==========
+      // Air membeku
+      if (cell.name === "water" && cell.temp <= 0) {
+        nextGrid[i] = { name: "ice", age: 0, temp: cell.temp };
+        continue;
+      }
+      // Air mendidih
+      if (cell.name === "water" && cell.temp >= 100) {
+        nextGrid[i] = { name: "steam", age: 0, temp: cell.temp };
+        continue;
+      }
+      // Es mencair
+      if (cell.name === "ice" && cell.temp > 50) {
+        nextGrid[i] = { name: "water", age: 0, temp: cell.temp };
+        continue;
+      } else if (cell.name === "ice" && cell.temp > 0 && cell.age % 180 === 0 && Math.random() < 0.3) {
+        nextGrid[i] = { name: "water", age: 0, temp: cell.temp };
+        continue;
+      }
+      // Uap mengembun
+      if (cell.name === "steam" && cell.temp < 1) {
+        nextGrid[i] = { name: "water", age: 0, temp: cell.temp };
+        continue;
+      } else if (cell.name === "steam" && cell.temp < 100 && cell.age % 180 === 0 && Math.random() < 0.3) {
+        nextGrid[i] = { name: "water", age: 0, temp: cell.temp };
+        continue;
+      }
+      // Plant mati kebakar
+      if (cell.name === "plant" && cell.temp >= 60) {
+        nextGrid[i] = { name: "fire", age: 0, temp: cell.temp };
+        continue;
+      }
+      // Api padam kalau dingin
+      if (cell.name === "fire" && cell.temp <= 0) {
+        nextGrid[i] = null;
+        continue;
+      }
+      if (cell.name === "sand" && cell.temp >= 1400) {
+        nextGrid[i] = { name: "moltenGlass", age: 0, temp: cell.temp };
+        continue;
+      }
+      if (cell.name === "moltenGlass" && cell.temp <= 20 && cell.age % 180 === 0 && Math.random() < 0.5) {
+        nextGrid[i] = { name: "glass", age: 0, temp: cell.temp };
+        continue;
+      }
+    }
+  }
+
+  grid = nextGrid;
+}
+  
+function draw() {
+  ctx.clearRect(0, 0, width * scale, height * scale);
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const cell = grid[idx(x, y)];
+      if (!cell) continue;
+      const meta = elements[cell.name];
+      if (!meta.color) continue;
+      
+      // 1. Gambar warna dasar
+      ctx.fillStyle = meta.color;
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+      
+      // 2. Overlay panas
+      if (cell.temp > 50) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = "#ff8080"; // merah transparan
+        ctx.fillRect(x * scale, y * scale, scale, scale);
+        ctx.globalAlpha = 1.0;
+      }
+      
+      // 3. Overlay dingin
+      if (cell.temp < 5) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = "#80dfff"; // biru transparan
+        ctx.fillRect(x * scale, y * scale, scale, scale);
+        ctx.globalAlpha = 1.0;
+      }
+    }
+  }
+}
+  
+let drawing = false;  
+canvas.addEventListener("mousedown", e => { drawing=true; paint(e); });  
+canvas.addEventListener("mousemove", e => { if (drawing) paint(e); });  
+window.addEventListener("mouseup", () => drawing=false);  
+  
+canvas.addEventListener("touchstart", e => { drawing=true; paint(e); e.preventDefault(); }, {passive:false});  
+canvas.addEventListener("touchmove", e => { if (drawing) paint(e); e.preventDefault(); }, {passive:false});  
+window.addEventListener("touchend", () => drawing=false);  
+  
+function paint(e) {  
+  const rect = canvas.getBoundingClientRect();  
+  const cx = (e.touches?e.touches[0].clientX:e.clientX) - rect.left;  
+  const cy = (e.touches?e.touches[0].clientY:e.clientY) - rect.top;  
+  const gx = Math.floor(cx/scale), gy = Math.floor(cy/scale);  
+  paintAt(gx,gy,selected);  
+}  
+  
+function loop() {  
+  if (running) step();  
+  draw();  
+  requestAnimationFrame(loop);  
+}  
+loop();
+</script>  
+</body>  
+                 </html>
