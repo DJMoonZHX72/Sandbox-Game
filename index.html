@@ -2,7 +2,7 @@
 <html lang="en">  
 <head>  
 <meta charset="UTF-8">  
-<title>Sandbox Game</title>  
+<title>Sandbox</title>  
 <style>  
   body {  
     background: #1e293b;  
@@ -63,7 +63,7 @@ const ctx = canvas.getContext("2d");
 const elements = {  
   sand:  { color: "#e3b25a", type: "powder" },  
   water: { color: "#4aa3ff", type: "liquid" },  
-  wall:  { color: "#666666", type: "static" },  
+  wall:  { color: "#666666", type: "solid" },  
   fire:  { color: "#ff6b35", type: "fire" },  
   plant: { color: "#74c476", type: "plant" },  
   heater:  { color: "#ff0000", type: "heater" },  
@@ -73,8 +73,9 @@ const elements = {
   steam: { color: "#cccccc", type: "gas" },
   moltenGlass: { color: "#ffcc66", type: "liquid" },
   glass: { color: "#cce6ff", type: "solid" },
-  superHeater: { color: "#ff0000", type: "superHeater" },
-  superCooler: { color: "#00ffff", type: "superCooler" }
+  superHeater: { color: "#aa0000", type: "superHeater" },
+  superCooler: { color: "#00aaaa", type: "superCooler" },
+  shatteredGlass: { color: "#cce6ff", type: "powder" }
 };  
   
 let grid = new Array(width * height).fill(null);  
@@ -126,7 +127,7 @@ function step() {
       const cell = grid[i];  
       if (!cell) continue;  
       const meta = elements[cell.name];  
-      cell.age++;  
+      cell.age++;
   
       // Heater  
       if (meta.type === "heater" && cell.age % 60 === 0) {  
@@ -192,7 +193,11 @@ function step() {
           continue;  
         }  
       }  
-      if (meta.type === "liquid") {  
+      if (meta.type === "liquid") {
+        if (cell.name === "moltenGlass" && cell.age === 1) {
+          cell.temp = 1400;
+        }
+        
         if (gravity && inside(x,y+1) && !grid[idx(x,y+1)]) {  
           grid[idx(x,y+1)] = cell;  
           grid[i] = null;  
@@ -210,7 +215,8 @@ function step() {
           continue;  
         }  
       }  
-      if (meta.type === "fire") {  
+      if (meta.type === "fire") {
+        cell.temp = 1000;
         if (cell.age > 20) { grid[i] = null; continue; }  
         for (let ry=-1; ry<=1; ry++) for (let rx=-1; rx<=1; rx++) {  
           if (rx===0 && ry===0) continue;  
@@ -218,9 +224,29 @@ function step() {
           if (!inside(nx,ny)) continue;  
           const ncell = grid[idx(nx,ny)];  
           if (ncell && elements[ncell.name].type === "plant") {  
-            grid[idx(nx,ny)] = { name:"fire", age:0, temp:cell.temp };  
+            grid[idx(nx,ny)] = { name:"fire", age:0, temp: cell.temp };  
           }  
-        }  
+        }
+        if (inside(x, y - 1) && !grid[idx(x, y - 1)] && Math.random() < 0.3) {
+          grid[idx(x, y - 1)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        const dir = Math.random() > 0.5 ? 1 : -1;
+        if (inside(x + dir, y) && !grid[idx(x + dir, y)]) {
+          grid[idx(x + dir, y)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        if (inside(x + dir, y - 1) && !grid[idx(x + dir, y - 1)]) {
+          grid[idx(x + dir, y - 1)] = cell;
+          grid[i] = null;
+          continue;
+        }
+        if (Math.random() < 0.01) { 
+          grid[i] = null; 
+          continue; 
+        }
       }  
       if (meta.type === "plant" && cell.age % 50 === 0) {
         const dirs=[[1,0],[-1,0],[0,1],[0,-1]];  
@@ -254,7 +280,7 @@ function step() {
       }
     }  
   }
-  let nextGrid = [...grid]; // salin grid buat frame berikutnya
+  let nextGrid = [...grid];
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -270,7 +296,7 @@ function step() {
           if (!inside(nx, ny)) continue;
           const ncell = grid[idx(nx, ny)];
           if (ncell) {
-            const diff = (cell.temp - ncell.temp) * 0.05; // 5% transfer
+            const diff = (cell.temp - ncell.temp) * 0.05;
             cell.temp -= diff;
             ncell.temp += diff;
           }
@@ -318,8 +344,19 @@ function step() {
         nextGrid[i] = { name: "moltenGlass", age: 0, temp: cell.temp };
         continue;
       }
-      if (cell.name === "moltenGlass" && cell.temp <= 20 && cell.age % 180 === 0 && Math.random() < 0.5) {
+      if (cell.name === "moltenGlass" && cell.temp <= 0) {
         nextGrid[i] = { name: "glass", age: 0, temp: cell.temp };
+        continue;
+      } else if (cell.name === "moltenGlass" && cell.temp <= 20 && cell.age % 180 === 0 && Math.random() < 0.5) {
+        nextGrid[i] = { name: "glass", age: 0, temp: cell.temp };
+        continue;
+      }
+      if (cell.name === "glass" && cell.temp >= 1500) {
+        nextGrid[i] = { name: "moltenGlass", age: 0, temp: cell.temp };
+        continue;
+      }
+      if (cell.name === "shatteredGlass" && cell.temp >= 1500) {
+        nextGrid[i] = { name: "moltenGlass", age: 0, temp: cell.temp };
         continue;
       }
     }
@@ -338,22 +375,26 @@ function draw() {
       const meta = elements[cell.name];
       if (!meta.color) continue;
       
-      // 1. Gambar warna dasar
       ctx.fillStyle = meta.color;
       ctx.fillRect(x * scale, y * scale, scale, scale);
       
-      // 2. Overlay panas
-      if (cell.temp > 50) {
+      // Overlay panas
+      if (cell.temp > 1000) {
         ctx.globalAlpha = 0.5;
-        ctx.fillStyle = "#ff8080"; // merah transparan
+        ctx.fillStyle = "#ff8080";
+        ctx.fillRect(x * scale, y * scale, scale, scale);
+        ctx.globalAlpha = 1.0;
+      } else if (cell.temp > 50) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = "#ff8080";
         ctx.fillRect(x * scale, y * scale, scale, scale);
         ctx.globalAlpha = 1.0;
       }
       
-      // 3. Overlay dingin
+      // Overlay dingin
       if (cell.temp < 5) {
         ctx.globalAlpha = 0.5;
-        ctx.fillStyle = "#80dfff"; // biru transparan
+        ctx.fillStyle = "#80dfff";
         ctx.fillRect(x * scale, y * scale, scale, scale);
         ctx.globalAlpha = 1.0;
       }
@@ -386,4 +427,4 @@ function loop() {
 loop();
 </script>  
 </body>  
-                 </html>
+</html>
