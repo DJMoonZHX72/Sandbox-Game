@@ -75,7 +75,12 @@ const elements = {
   glass: { color: "#cce6ff", type: "solid" },
   superHeater: { color: "#aa0000", type: "superHeater" },
   superCooler: { color: "#00aaaa", type: "superCooler" },
-  shatteredGlass: { color: "#cce6ff", type: "powder" }
+  shatteredGlass: { color: "#cce6ff", type: "powder" },
+  soil: { color: "#7e3400", type: "powder" },
+  rock: { color: "#6c6c6c", type: "solid" },
+  lava: { color: "#ff4814", type: "liquid" },
+  obsidian: { color: "#2d033b", type: "solid" },
+  tnt: { color: "#ff0000", type: "tnt" }
 };  
   
 let grid = new Array(width * height).fill(null);  
@@ -197,6 +202,9 @@ function step() {
         if (cell.name === "moltenGlass" && cell.age === 1) {
           cell.temp = 1400;
         }
+        if (cell.name === "lava" && cell.age === 1) {
+          cell.temp = 1200;
+        }
         
         if (gravity && inside(x,y+1) && !grid[idx(x,y+1)]) {  
           grid[idx(x,y+1)] = cell;  
@@ -278,6 +286,64 @@ function step() {
           continue; 
         }
       }
+      if (meta.type === "tnt") {
+        let touchingFlame = false;
+        for (let ry = -1; ry <= 1; ry++) {
+          for (let rx = -1; rx <= 1; rx++) {
+            if (rx === 0 && ry === 0) continue;
+            const nx = x + rx, ny = y + ry;
+            if (!inside(nx, ny)) continue;
+            const ncell = grid[idx(nx, ny)];
+            if (!ncell) continue;
+            if (ncell.name === "fire" || ncell.name === "lava") {
+              touchingFlame = true;
+            }
+          }
+        }
+        
+        const hot = cell.temp >= 200;
+        if (hot || touchingFlame || cell.primed) {
+          cell.primed = (cell.primed ?? 0) + 1;
+          
+          if (cell.primed % 10 === 0) cell.temp += 20;
+          
+          if (cell.primed >= 30) {
+            const R = 8;
+            for (let dy = -R; dy <= R; dy++) {
+              for (let dx = -R; dx <= R; dx++) {
+                const nx = x + dx, ny = y + dy;
+                if (!inside(nx, ny)) continue;
+                const d = Math.hypot(dx, dy);
+                if (d > R) continue;
+                
+                const j = idx(nx, ny);
+                const tgt = grid[j];
+                
+                const heat = Math.max(0, Math.floor((R - d) * 120));
+                if (tgt) tgt.temp = (tgt.temp ?? 20) + heat;
+                
+                if (!tgt) continue;
+                const ttype = elements[tgt.name]?.type;
+                if (ttype !== "wall") {
+                  const destroyChance = 0.85 * (1 - d / (R + 0.001));
+                  if (Math.random() < destroyChance) {
+                    grid[j] = null;
+                    continue;
+                  }
+                  
+                  if (Math.random() < 0.35 && tgt.name !== "water" && tgt.name !== "ice") {
+                    grid[j] = { name: "fire", age: 0, temp: Math.max(heat, 600) };
+                    continue;
+                  }
+                }
+              }
+            }
+            grid[i] = null;
+            continue;
+          }
+        }
+        continue;
+      }
     }  
   }
   let nextGrid = [...grid];
@@ -296,7 +362,7 @@ function step() {
           if (!inside(nx, ny)) continue;
           const ncell = grid[idx(nx, ny)];
           if (ncell) {
-            const diff = (cell.temp - ncell.temp) * 0.05;
+            const diff = (cell.temp - ncell.temp) * 0.05; // 5%
             cell.temp -= diff;
             ncell.temp += diff;
           }
@@ -357,6 +423,14 @@ function step() {
       }
       if (cell.name === "shatteredGlass" && cell.temp >= 1500) {
         nextGrid[i] = { name: "moltenGlass", age: 0, temp: cell.temp };
+        continue;
+      }
+      if (cell.name === "rock" && cell.temp >= 1200) {
+        nextGrid[i] = { name: "lava", age: 0, temp: cell.temp };
+        continue;
+      }
+      if (cell.name === "lava" && cell.temp <= 600 && Math.random() < 0.5) {
+        nextGrid[i] = { name: "obsidian", age: 0, temp: cell.temp };
         continue;
       }
     }
