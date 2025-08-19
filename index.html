@@ -11,7 +11,7 @@
     display: flex;  
     gap: 10px;  
     padding: 10px;  
-  }  
+  }
   canvas {  
     background: #000;  
     image-rendering: pixelated;  
@@ -36,11 +36,46 @@
   }  
   button.active {  
     outline: 2px solid yellow;  
-  }  
-</style>  
+  }
+  .notif {
+    position: fixed;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #9635ff, #5ed5ca);
+    color: black;
+    padding: 10px 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px black;
+    font-weight: bold;
+    transition: top 0.5s ease;
+    z-index: 9999;
+  }
+  .notif.muncul {
+    top: 20px;
+  }
+  .donate-btn {
+    display: inline-block;
+    padding: .45rem .7rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    text-decoration: none;
+    color: #fff;
+    background: #1f2937;
+    border: 3px solid #111827;
+    box-shadow: 4px 4px 0 0 #0b1220;
+    transform: translateZ(0);
+  }
+  .donate-btn:hover {
+    transform: translate(-2px,-2px);
+    box-shadow: 6px 6px 0 0 #0b1220;
+    border: 3px solid #0f0;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>  
 <body>  
-  
+  <div id="notifikasi" class="notif">Bantu donate biar bisa beli laptop🗿🙏</div>
 <div class="toolbar">  
   <div id="elements"></div>  
   <label>Brush <input type="range" id="brush" min="1" max="12" value="4"></label>  
@@ -49,13 +84,26 @@
   <button id="gravityBtn">Gravity: On</button>  
 </div>  
   
-<canvas id="c"></canvas>  
+<canvas id="c"></canvas>
+<div>
+  <a class="donate-btn" href="https://saweria.co/MoonStudio72" rel="noopener" aria-label="Donate to MoonStudio72">Donate Me!</a>
+</div>
   
 <script>
 const width = 200;  
 const height = 150;  
 const scale = 4;  
-const canvas = document.getElementById("c");  
+const canvas = document.getElementById("c");
+function showNotif() {
+  const notif = document.getElementById('notifikasi');
+  notif.classList.add('muncul');
+  
+  setTimeout(() => {
+    notif.classList.remove('muncul');
+  }, 3000);
+}
+showNotif();
+setInterval(showNotif, 60000);
 canvas.width = width * scale;  
 canvas.height = height * scale;  
 const ctx = canvas.getContext("2d");  
